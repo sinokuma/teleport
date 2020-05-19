@@ -1406,8 +1406,11 @@ func createAgent(me *user.User, privateKeyByte []byte, certificateBytes []byte) 
 	}
 
 	// create a (unstarted) agent and add the key to it
-	teleAgent := teleagent.NewServer()
-	teleAgent.Add(agentKey)
+	keyring := agent.NewKeyring()
+	keyring.Add(agentKey)
+	teleAgent := teleagent.NewServer(func() (teleagent.Agent, error) {
+		return teleagent.WrapAgent(keyring), nil
+	})
 
 	// start the SSH agent
 	err = teleAgent.ListenUnixSocket(sockPath, uid, gid, 0600)

@@ -14,16 +14,63 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
+// Agent extends the agent.Agent interface.
+// APIs which accept this interface promise to
+// call `Close()` when they are done using the
+// supplied agent.
+type Agent interface {
+	agent.Agent
+	io.Closer
+}
+
+// wrapper wraps an agent.Agent in the extended
+// Agent interface.
+type wrapper struct {
+	agent.Agent
+}
+
+func (w wrapper) Close() error { return nil }
+
+// WrapAgent wraps an instance of the standard agent.Agent interface
+// in the extended Agent interface.  Note that calling Close on the
+// resulting Agent is a NOP, even if the underyling type of the
+// supplied agent.Agent instance has a Close method.  This means that
+// WrapAgent can also be called on an instance of the extended Agent
+// interface in order to protect its Close method from being called.
+func WrapAgent(std agent.Agent) Agent {
+	return wrapper{std}
+}
+
+// AgentGetter is a function used to get an agent instance.
+type AgentGetter func() (Agent, error)
+
 // AgentServer is implementation of SSH agent server
 type AgentServer struct {
-	agent.Agent
+	getAgent AgentGetter
 	listener net.Listener
 	path     string
 }
 
 // NewServer returns new instance of agent server
-func NewServer() *AgentServer {
-	return &AgentServer{Agent: agent.NewKeyring()}
+func NewServer(getter AgentGetter) *AgentServer {
+	return &AgentServer{getAgent: getter}
+}
+
+// startServe starts serving agent protocol against conn
+func (a *AgentServer) startServe(conn net.Conn) error {
+	instance, err := a.getAgent()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	go func() {
+		defer instance.Close()
+		if err := agent.ServeAgent(instance, conn); err != nil {
+			if err != io.EOF {
+				log.Error(err.Error())
+			}
+		}
+	}()
+	return nil
 }
 
 // ListenUnixSocket starts listening and serving agent assuming that
@@ -77,13 +124,10 @@ func (a *AgentServer) Serve() error {
 			continue
 		}
 		tempDelay = 0
-		go func() {
-			if err := agent.ServeAgent(a.Agent, conn); err != nil {
-				if err != io.EOF {
-					log.Errorf(err.Error())
-				}
-			}
-		}()
+		if err := a.startServe(conn); err != nil {
+			log.Errorf("Failed to start serving agent: %v", err)
+			return trace.Wrap(err)
+		}
 	}
 }
 

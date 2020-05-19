@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -35,6 +34,7 @@ import (
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv"
 	"github.com/gravitational/teleport/lib/sshutils"
+	"github.com/gravitational/teleport/lib/teleagent"
 	"github.com/gravitational/teleport/lib/utils"
 
 	"github.com/gravitational/trace"
@@ -46,12 +46,11 @@ import (
 // remote hosts to a proxy client (AKA port mapping)
 type proxySubsys struct {
 	proxySubsysConfig
-	log          *logrus.Entry
-	closeC       chan struct{}
-	error        error
-	closeOnce    sync.Once
-	agent        agent.Agent
-	agentChannel ssh.Channel
+	log       *logrus.Entry
+	closeC    chan struct{}
+	error     error
+	closeOnce sync.Once
+	agent     teleagent.Agent
 }
 
 // parseProxySubsys looks at the requested subsystem name and returns a fully configured
@@ -172,9 +171,8 @@ func newProxySubsys(cfg proxySubsysConfig) (*proxySubsys, error) {
 			trace.Component:       teleport.ComponentSubsystemProxy,
 			trace.ComponentFields: map[string]string{},
 		}),
-		closeC:       make(chan struct{}),
-		agent:        cfg.ctx.GetAgent(),
-		agentChannel: cfg.ctx.GetAgentChannel(),
+		closeC: make(chan struct{}),
+		agent:  cfg.ctx.GetAgent(),
 	}, nil
 }
 
@@ -449,6 +447,9 @@ func (t *proxySubsys) close(err error) {
 	t.closeOnce.Do(func() {
 		t.error = err
 		close(t.closeC)
+		if t.agent != nil {
+			t.agent.Close()
+		}
 	})
 }
 

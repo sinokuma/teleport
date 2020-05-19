@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/auth"
@@ -38,6 +37,7 @@ import (
 	"github.com/gravitational/teleport/lib/services"
 	rsession "github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/sshutils"
+	"github.com/gravitational/teleport/lib/teleagent"
 	"github.com/gravitational/teleport/lib/utils"
 
 	"github.com/gravitational/trace"
@@ -293,7 +293,7 @@ func NewServerContext(ccx *sshutils.ConnectionContext, srv Server, identityConte
 		return nil, trace.Wrap(err)
 	}
 
-	cancelContext, cancel := context.WithCancel(context.TODO())
+	cancelContext, cancel := context.WithCancel(ccx)
 
 	ctx := &ServerContext{
 		Parent:            ccx,
@@ -448,22 +448,13 @@ func (c *ServerContext) AddCloser(closer io.Closer) {
 	c.closers = append(c.closers, closer)
 }
 
-// GetAgent returns a agent.Agent which represents the capabilities of an SSH agent,
+// GetAgent returns a teleagent.Agent which represents the capabilities of an SSH agent,
 // or nil if no agent is available in this context.
-func (c *ServerContext) GetAgent() agent.Agent {
+func (c *ServerContext) GetAgent() teleagent.Agent {
 	if c.Parent == nil {
 		return nil
 	}
 	return c.Parent.GetAgent()
-}
-
-// GetAgentChannel returns the channel over which communication with the agent occurs,
-// or nil if no agent is available in this context.
-func (c *ServerContext) GetAgentChannel() ssh.Channel {
-	if c.Parent == nil {
-		return nil
-	}
-	return c.Parent.GetAgentChannel()
 }
 
 // GetTerm returns a Terminal.
