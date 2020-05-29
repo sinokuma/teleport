@@ -1436,7 +1436,6 @@ func (h *Handler) siteNodeConnect(
 	}
 
 	req.KeepAliveInterval = clusterConfig.GetKeepAliveInterval()
-	req.KeepAliveCountMax = clusterConfig.GetKeepAliveCountMax()
 	req.Namespace = namespace
 	req.ProxyHostPort = h.ProxyHostPort()
 	req.Cluster = site.GetName()
